@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AeroOps Live Only" />
+  <meta name="theme-color" content="#060b16" />
+  <title>AeroOps Live Only — Live Flight &amp; Airport Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          },
+          colors: {
+            void: {
+              950: '#060b16',
+              900: '#0c1527',
+              850: '#121f38',
+              800: '#19294a'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .pb-safe {
+      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .nav-safe {
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes pulseRing {
+      0% { transform: scale(0.85); opacity: 0.9; }
+      75% { transform: scale(2.1); opacity: 0; }
+      100% { transform: scale(2.1); opacity: 0; }
+    }
+    .pulse-ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: currentColor;
+      animation: pulseRing 2s infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-void-950 dark:text-slate-100 font-sans antialiased min-h-screen selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- Top Header & Live Telemetry Status Banner -->
+  <header class="sticky top-0 z-30 border-b border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-void-900/95 backdrop-blur-md">
+    <div class="max-w-3xl mx-auto px-3.5 py-2.5 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20 shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-bold tracking-tight truncate">AeroOps Live Only</h1>
+            <span id="liveStatusPill" class="relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0">
+              <span id="liveStatusDot" class="relative w-1.5 h-1.5 rounded-full"></span>
+              <span id="liveStatusLabel">NO LIVE DATA</span>
+            </span>
+          </div>
+          <p id="headerMetaText" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+            Last live sync: Never · Mode: OpenSky ADS-B
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button
+          id="openHostGuideBtn"
+          type="button"
+          class="min-h-[40px] px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-void-850 dark:hover:bg-void-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+          title="iPhone Safari / Chrome Hosting & Bookmark Guide"
+        >
+          <span>🌐</span>
+          <span class="hidden sm:inline">iPhone Link</span>
+        </button>
+
+        <button
+          id="headerRefreshBtn"
+          type="button"
+          class="min-h-[40px] min-w-[44px] px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs font-semibold shadow-sm shadow-sky-600/30 flex items-center justify-center gap-1.5 transition cursor-pointer"
+          aria-label="Fetch live flight data now"
+        >
+          <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span id="headerRefreshText" class="hidden sm:inline">Fetch Live</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Explicit Diagnostic Banner (Never fabricates data; always explains live state) -->
+    <div id="topDiagnosticBanner" class="border-t px-3.5 py-2 transition-colors">
+      <div class="max-w-3xl mx-auto flex items-center justify-between gap-2 text-xs">
+        <div id="topDiagnosticMessage" class="font-medium leading-snug">
+          No live data fetched yet. Flight board stays empty until a live API response succeeds.
+        </div>
+        <button
+          id="bannerRetryBtn"
+          type="button"
+          class="shrink-0 min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold border transition cursor-pointer"
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="max-w-3xl mx-auto px-3.5 pt-4 pb-safe space-y-4">
+
+    <!-- TAB 1: LIVE BOARD -->
+    <section id="tabBoard" class="space-y-4">
+
+      <!-- Region Filter + Quick Hub Pills + Search -->
+      <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3 space-y-3 shadow-sm">
+        <div class="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-void-850 p-1 rounded-xl" role="tablist" aria-label="Region filter">
+          <button type="button" data-region="ALL" class="region-btn min-h-[38px] rounded-lg text-xs font-bold transition cursor-pointer bg-white dark:bg-void-800 text-sky-600 dark:text-sky-400 shadow-sm">All</button>
+          <button type="button" data-region="EUROPE" class="region-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer">Europe</button>
+          <button type="button" data-region="LONDON" class="region-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer">London</button>
+          <button type="button" data-region="ASIA" class="region-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer">Asia</button>
+        </div>
+
+        <!-- Quick Hub Pills -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between px-0.5">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Airport Hubs (<span id="hubCountSpan" class="font-mono">23</span>)
+            </span>
+            <button id="resetHubBtn" type="button" class="text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer">
+              All Hubs
+            </button>
+          </div>
+          <div id="hubPillsContainer" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Selected Hub Details -->
+        <div id="selectedHubBar" class="hidden rounded-xl bg-sky-500/10 border border-sky-500/30 p-3 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span id="hubBarIata" class="font-mono font-bold text-sm text-sky-600 dark:text-sky-400">KRK</span>
+              <span id="hubBarCity" class="text-xs font-bold truncate">Kraków</span>
+              <span id="hubBarRegion" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300">EUROPE</span>
+            </div>
+            <p id="hubBarName" class="text-[11px] text-slate-600 dark:text-slate-300 truncate mt-0.5">Kraków John Paul II Airport</p>
+          </div>
+          <span id="hubBarBox" class="text-[10px] font-mono text-right text-slate-500 dark:text-slate-400 shrink-0"></span>
+        </div>
+
+        <!-- Search Box -->
+        <div class="relative">
+          <input
+            id="boardSearchInput"
+            type="search"
+            placeholder="Filter fetched flights by flight #, callsign, route, status..."
+            class="w-full min-h-[42px] pl-9 pr-3 rounded-xl text-sm bg-slate-50 dark:bg-void-850 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+          />
+          <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <!-- Movement Direction Filter Pills (All / Departures / Arrivals) -->
+        <div class="space-y-1.5 pt-0.5">
+          <div class="flex items-center justify-between px-0.5">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Movement Direction (<span id="directionContextLabel" class="font-mono text-sky-600 dark:text-sky-400">All Hubs / Region</span>)
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5 bg-slate-100 dark:bg-void-850 p-1 rounded-xl" role="tablist" aria-label="Movement direction filter">
+            <button type="button" data-movement="ALL" class="movement-btn min-h-[38px] rounded-lg text-xs font-bold transition cursor-pointer bg-white dark:bg-void-800 text-sky-600 dark:text-sky-400 shadow-sm">
+              All (<span id="countMoveAll" class="font-mono">0</span>)
+            </button>
+            <button type="button" data-movement="DEPARTURE" class="movement-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer">
+              ↗ Departures (<span id="countMoveDep" class="font-mono">0</span>)
+            </button>
+            <button type="button" data-movement="ARRIVAL" class="movement-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer">
+              ↙ Arrivals (<span id="countMoveArr" class="font-mono">0</span>)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compact Telemetry Counters -->
+      <div class="grid grid-cols-3 gap-2.5">
+        <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3">
+          <div class="text-[11px] text-slate-500 dark:text-slate-400">Live Rows</div>
+          <div id="metricLiveRows" class="text-xl font-bold font-mono mt-0.5">0</div>
+          <div id="metricDepArrBreakdown" class="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">0 DEP · 0 ARR</div>
+        </div>
+        <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3">
+          <div class="text-[11px] text-slate-500 dark:text-slate-400">Watched</div>
+          <div id="metricWatchedRows" class="text-xl font-bold font-mono text-sky-600 dark:text-sky-400 mt-0.5">0</div>
+          <div class="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">Live matched</div>
+        </div>
+        <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3">
+          <div class="text-[11px] text-slate-500 dark:text-slate-400">Last Live Sync</div>
+          <div id="metricLastSync" class="text-sm font-bold font-mono mt-1.5 truncate">Never</div>
+        </div>
+      </div>
+
+      <!-- Explicit Empty / Error State (Shown whenever there is no live data or a fetch fails) -->
+      <div id="liveEmptyStateCard" class="rounded-2xl bg-white dark:bg-void-900 border border-amber-500/35 p-5 shadow-sm space-y-3">
+        <div class="flex items-start gap-3">
+          <span class="text-xl leading-none mt-0.5" aria-hidden="true">📡</span>
+          <div class="space-y-1 min-w-0 flex-1">
+            <h2 id="emptyStateTitle" class="text-sm font-bold text-amber-700 dark:text-amber-300">No Live Flight Data Loaded Yet</h2>
+            <p id="emptyStateReason" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              AeroOps Live Only never shows sample, demo, or simulated flights. Tap <strong>Fetch Live</strong> or <strong>Retry</strong> to pull real-time data from your selected live source.
+            </p>
+            <div class="pt-1 font-mono text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Last successful live sync: <strong id="emptyStateLastSync">Never</strong></span>
+              <span>Source: <strong id="emptyStateSource">OpenSky Network ADS-B</strong></span>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button id="emptyRetryBtn" type="button" class="min-h-[40px] px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer">
+            Retry Live Fetch Now
+          </button>
+          <button id="emptyOpenSettingsBtn" type="button" class="min-h-[40px] px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-void-850 dark:hover:bg-void-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition cursor-pointer">
+            Check Data Source Settings
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Fetched Flights Container (Only populated from real API responses) -->
+      <div id="liveFlightsContainer" class="hidden space-y-2.5">
+        <!-- Populated strictly from live API responses -->
+      </div>
+    </section>
+
+    <!-- TAB 2: MY FLIGHTS WATCHLIST -->
+    <section id="tabWatchlist" class="hidden space-y-4">
+      <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-4 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h2 class="text-base font-bold tracking-tight">My Flights Watchlist</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Saved in localStorage · Updates only when a live fetch returns a matching flight/callsign
+            </p>
+          </div>
+          <button
+            id="openAddWatchBtn"
+            type="button"
+            class="min-h-[40px] px-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition cursor-pointer"
+          >
+            + Track Flight
+          </button>
+        </div>
+
+        <!-- Add Flight Form -->
+        <form id="addWatchForm" class="hidden rounded-xl bg-slate-50 dark:bg-void-850 border border-slate-200 dark:border-slate-700 p-3.5 space-y-3">
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label for="watchCodeInput" class="block text-[11px] font-semibold mb-1">Flight # or Callsign *</label>
+              <input id="watchCodeInput" type="text" required placeholder="LO301 or BAW873" class="w-full min-h-[40px] px-3 rounded-lg text-sm font-mono uppercase bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700" />
+            </div>
+            <div>
+              <label for="watchAirlineInput" class="block text-[11px] font-semibold mb-1">Airline / Label</label>
+              <input id="watchAirlineInput" type="text" placeholder="LOT Polish Airlines" class="w-full min-h-[40px] px-3 rounded-lg text-sm bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label for="watchOriginInput" class="block text-[11px] font-semibold mb-1">From *</label>
+              <input id="watchOriginInput" type="text" maxlength="4" required placeholder="KRK" class="w-full min-h-[40px] px-2.5 rounded-lg text-sm font-mono uppercase bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700" />
+            </div>
+            <div>
+              <label for="watchDestInput" class="block text-[11px] font-semibold mb-1">To *</label>
+              <input id="watchDestInput" type="text" maxlength="4" required placeholder="LHR" class="w-full min-h-[40px] px-2.5 rounded-lg text-sm font-mono uppercase bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700" />
+            </div>
+            <div>
+              <label for="watchSchedInput" class="block text-[11px] font-semibold mb-1">Sched Time *</label>
+              <input id="watchSchedInput" type="text" required placeholder="18:50" class="w-full min-h-[40px] px-2.5 rounded-lg text-sm font-mono bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-1">
+            <button id="cancelWatchFormBtn" type="button" class="min-h-[40px] px-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-void-800 cursor-pointer">Cancel</button>
+            <button type="submit" class="min-h-[40px] px-4 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">Save to Watchlist</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Saved Watchlist Items -->
+      <div id="watchlistItemsContainer" class="space-y-2.5">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Notification Center Log -->
+      <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-4 space-y-2.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-bold">Notification Center Log</h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">Live fetch errors, rate limits, and verified watchlist changes</p>
+          </div>
+          <button id="clearNotifLogBtn" type="button" class="min-h-[34px] px-2.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-rose-500 cursor-pointer">Clear</button>
+        </div>
+        <div id="notifLogContainer" class="space-y-2 max-h-64 overflow-y-auto">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SETTINGS & IPHONE HOSTING GUIDE -->
+    <section id="tabSettings" class="hidden space-y-4">
+
+      <!-- iPhone Safari / Chrome https:// Hosting & Bookmark Guide -->
+      <div class="rounded-2xl bg-gradient-to-br from-sky-500/15 via-indigo-500/10 to-transparent border border-sky-500/30 p-4 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <span class="inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300 font-bold mb-1">iPhone Browser &amp; Bookmark Guide</span>
+            <h2 class="text-base font-bold tracking-tight">Host on an https:// URL for Safari &amp; Chrome</h2>
+          </div>
+          <span class="text-2xl" aria-hidden="true">📲</span>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          On iPhone, opening a local <code class="font-mono">.html</code> file from the <strong>Files</strong> app opens a limited Quick Look preview instead of Safari or Chrome, and cannot be bookmarked cleanly like a website. Host this single HTML file on a free static <code class="font-mono">https://</code> host first:
+        </p>
+        <ol class="list-decimal list-inside space-y-1.5 text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
+          <li><strong>Netlify Drop:</strong> Go to <span class="font-mono text-sky-600 dark:text-sky-400">app.netlify.com/drop</span> on a computer or browser, drop <code class="font-mono">aeroops-live-only.html</code> (or a folder containing it as <code class="font-mono">index.html</code>), and copy the generated <code class="font-mono">https://</code> URL.</li>
+          <li><strong>GitHub Pages:</strong> Create a free repository, upload <code class="font-mono">index.html</code> (this file), and enable <strong>Settings → Pages</strong> to get a permanent <code class="font-mono">https://</code> link.</li>
+          <li><strong>Bookmark or Add to Home Screen on iPhone:</strong> Open the <code class="font-mono">https://</code> link in <strong>Safari</strong> (or <strong>Chrome</strong>), tap <strong>Share</strong> → <strong>Add to Home Screen</strong> (or tap the Bookmark icon).</li>
+        </ol>
+      </div>
+
+      <!-- Live Data Source & Polling Configuration -->
+      <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-4 space-y-3.5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold">Live Data Source (Live Only)</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">No sample/simulated fallback — failures display exact reason</p>
+          </div>
+          <span id="settingsReqCount" class="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-void-850">0 req</span>
+        </div>
+
+        <div class="space-y-2 text-xs">
+          <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-void-850 cursor-pointer">
+            <input type="radio" name="liveSourceMode" value="OPENSKY" class="mt-0.5 text-sky-600" />
+            <div>
+              <div class="font-bold">OpenSky Network Live ADS-B (No API Key Needed)</div>
+              <div class="text-slate-500 dark:text-slate-400">Fetches live aircraft bounding-box telemetry from OpenSky. Public/anonymous access can be rate-limited (HTTP 429) or temporarily unreachable.</div>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-void-850 cursor-pointer">
+            <input type="radio" name="liveSourceMode" value="AVIATIONSTACK" class="mt-0.5 text-sky-600" />
+            <div>
+              <div class="font-bold">Aviationstack Timetable API (API Key Required)</div>
+              <div class="text-slate-500 dark:text-slate-400">Fetches live flight schedule/status rows for your selected airport hub using your Aviationstack access key.</div>
+            </div>
+          </label>
+        </div>
+
+        <div id="aviationstackKeySection" class="space-y-1.5">
+          <label for="aviationstackApiKeyInput" class="block text-xs font-semibold">Aviationstack Access Key (saved in localStorage)</label>
+          <input
+            id="aviationstackApiKeyInput"
+            type="password"
+            autocomplete="off"
+            placeholder="Enter Aviationstack API access_key..."
+            class="w-full min-h-[42px] px-3 rounded-xl text-xs font-mono bg-slate-50 dark:bg-void-850 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label for="pollIntervalSelect" class="block text-xs font-semibold mb-1">Polling Interval (Conservative)</label>
+            <select id="pollIntervalSelect" class="w-full min-h-[42px] px-3 rounded-xl text-xs bg-slate-50 dark:bg-void-850 border border-slate-200 dark:border-slate-700">
+              <option value="0">Manual Only (0s)</option>
+              <option value="120">Every 2 minutes (120s)</option>
+              <option value="180">Every 3 minutes (180s)</option>
+              <option value="300">Every 5 minutes (300s)</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button id="saveLiveSettingsBtn" type="button" class="w-full min-h-[42px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer">
+              Save &amp; Fetch Live Now
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification Center Permissions & Preferences -->
+      <div class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-4 space-y-3 shadow-sm">
+        <h3 class="text-sm font-bold">Notification Center &amp; Display</h3>
+
+        <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-void-850 border border-slate-200/70 dark:border-slate-800 text-xs">
+          <div>
+            <div class="font-semibold">Browser Notification API</div>
+            <div id="browserNotifPermText" class="font-mono text-[11px] text-slate-500 dark:text-slate-400">Checking...</div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="requestBrowserNotifBtn" type="button" class="min-h-[36px] px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold cursor-pointer">
+              Allow
+            </button>
+            <button id="testNotificationBtn" type="button" class="min-h-[36px] px-2.5 rounded-lg bg-slate-200 dark:bg-void-800 font-semibold cursor-pointer">
+              Test
+            </button>
+          </div>
+        </div>
+
+        <label class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-void-850 border border-slate-200/70 dark:border-slate-800 text-xs cursor-pointer">
+          <span class="font-medium">Optional Web Audio alert chime</span>
+          <input id="audioChimeCheckbox" type="checkbox" class="w-4 h-4 rounded text-sky-600" />
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-void-850 border border-slate-200/70 dark:border-slate-800 text-xs cursor-pointer">
+          <span class="font-medium">Dark theme</span>
+          <input id="darkThemeCheckbox" type="checkbox" checked class="w-4 h-4 rounded text-sky-600" />
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <!-- Quick iPhone Hosting Modal -->
+  <div id="iphoneHostModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="iphoneHostTitle">
+    <div class="w-full max-w-md rounded-2xl bg-white dark:bg-void-900 border border-slate-200 dark:border-slate-700 p-4 sm:p-5 shadow-2xl space-y-3.5" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between">
+        <h2 id="iphoneHostTitle" class="text-base font-bold">iPhone Safari / Chrome Setup</h2>
+        <button id="closeHostModalBtn" type="button" class="min-h-[36px] min-w-[36px] rounded-xl hover:bg-slate-100 dark:hover:bg-void-800 text-sm font-bold cursor-pointer" aria-label="Close guide">✕</button>
+      </div>
+      <div class="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+        <p>
+          iPhone <strong>Files</strong> opens local <code class="font-mono">.html</code> files in Quick Look, not Safari or Chrome. Host this file on a free <code class="font-mono">https://</code> URL (such as <strong>GitHub Pages</strong> or <strong>Netlify Drop</strong>) so Safari/Chrome opens it normally.
+        </p>
+        <div class="rounded-xl p-3 bg-slate-50 dark:bg-void-850 border border-slate-200 dark:border-slate-800 space-y-1">
+          <div class="font-bold text-slate-900 dark:text-white">Once Opened in Safari or Chrome:</div>
+          <div>1. Tap the <strong>Bookmark</strong> icon or <strong>Share → Add to Home Screen</strong>.</div>
+          <div>2. Your watchlist, API key, and preferences stay saved in <code class="font-mono">localStorage</code> on that origin.</div>
+        </div>
+      </div>
+      <button id="doneHostModalBtn" type="button" class="w-full min-h-[42px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold cursor-pointer">
+        Understood
+      </button>
+    </div>
+  </div>
+
+  <!-- In-App Alert Banner Stack -->
+  <div id="inAppAlertStack" aria-live="polite" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-[92%] max-w-md pointer-events-none"></div>
+
+  <!-- Bottom Navigation Bar -->
+  <nav id="bottomNavBar" aria-label="Main navigation" class="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-void-900/95 backdrop-blur-md nav-safe pointer-events-auto">
+    <div class="max-w-3xl mx-auto px-2 pt-1.5 grid grid-cols-3 gap-1">
+      <button id="navTabBoard" type="button" data-open-tab="BOARD" class="min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 transition cursor-pointer">
+        <span>📡</span>
+        <span>Live Board</span>
+      </button>
+      <button id="navTabWatch" type="button" data-open-tab="WATCH" class="min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-void-850 transition cursor-pointer">
+        <span>⭐</span>
+        <span>My Flights <span id="navWatchCountPill" class="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-300">0</span></span>
+      </button>
+      <button id="navTabSettings" type="button" data-open-tab="SETTINGS" class="min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-void-850 transition cursor-pointer">
+        <span>⚙️</span>
+        <span>Settings</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =====================================================================
+      // 1. AIRPORTS DIRECTORY (EUROPE, LONDON, ASIA) — ZERO SAMPLE FLIGHTS
+      // =====================================================================
+      const AIRPORTS = [
+        // Europe (10 hubs)
+        { iata: 'KRK', city: 'Kraków', name: 'Kraków John Paul II Airport', region: 'EUROPE', lat: 50.0777, lon: 19.7848 },
+        { iata: 'GDN', city: 'Gdańsk', name: 'Gdańsk Lech Wałęsa Airport', region: 'EUROPE', lat: 54.3776, lon: 18.4662 },
+        { iata: 'FRA', city: 'Frankfurt', name: 'Frankfurt Airport', region: 'EUROPE', lat: 50.0379, lon: 8.5622 },
+        { iata: 'MUC', city: 'Munich', name: 'Munich Airport', region: 'EUROPE', lat: 48.3537, lon: 11.7750 },
+        { iata: 'AMS', city: 'Amsterdam', name: 'Amsterdam Airport Schiphol', region: 'EUROPE', lat: 52.3105, lon: 4.7683 },
+        { iata: 'CDG', city: 'Paris CDG', name: 'Paris Charles de Gaulle', region: 'EUROPE', lat: 49.0097, lon: 2.5479 },
+        { iata: 'MAD', city: 'Madrid', name: 'Adolfo Suárez Madrid–Barajas', region: 'EUROPE', lat: 40.4983, lon: -3.5676 },
+        { iata: 'ZRH', city: 'Zurich', name: 'Zurich Airport', region: 'EUROPE', lat: 47.4582, lon: 8.5555 },
+        { iata: 'VIE', city: 'Vienna', name: 'Vienna International Airport', region: 'EUROPE', lat: 48.1103, lon: 16.5697 },
+        { iata: 'CPH', city: 'Copenhagen', name: 'Copenhagen Airport', region: 'EUROPE', lat: 55.6180, lon: 12.6508 },
+
+        // London (5 hubs)
+        { iata: 'LHR', city: 'London Heathrow', name: 'London Heathrow Airport', region: 'LONDON', lat: 51.4700, lon: -0.4543 },
+        { iata: 'LGW', city: 'London Gatwick', name: 'London Gatwick Airport', region: 'LONDON', lat: 51.1537, lon: -0.1821 },
+        { iata: 'STN', city: 'London Stansted', name: 'London Stansted Airport', region: 'LONDON', lat: 51.8850, lon: 0.2350 },
+        { iata: 'LTN', city: 'London Luton', name: 'London Luton Airport', region: 'LONDON', lat: 51.8747, lon: -0.3683 },
+        { iata: 'LCY', city: 'London City', name: 'London City Airport', region: 'LONDON', lat: 51.5053, lon: 0.0553 },
+
+        // Asia (8 hubs)
+        { iata: 'SIN', city: 'Singapore', name: 'Singapore Changi Airport', region: 'ASIA', lat: 1.3644, lon: 103.9915 },
+        { iata: 'HND', city: 'Tokyo Haneda', name: 'Tokyo Haneda International', region: 'ASIA', lat: 35.5494, lon: 139.7798 },
+        { iata: 'NRT', city: 'Tokyo Narita', name: 'Narita International Airport', region: 'ASIA', lat: 35.7720, lon: 140.3929 },
+        { iata: 'ICN', city: 'Seoul Incheon', name: 'Seoul Incheon International', region: 'ASIA', lat: 37.4602, lon: 126.4407 },
+        { iata: 'HKG', city: 'Hong Kong', name: 'Hong Kong International Airport', region: 'ASIA', lat: 22.3080, lon: 113.9185 },
+        { iata: 'BKK', city: 'Bangkok', name: 'Suvarnabhumi Airport', region: 'ASIA', lat: 13.6900, lon: 100.7501 },
+        { iata: 'DOH', city: 'Doha', name: 'Hamad International Airport', region: 'ASIA', lat: 25.2731, lon: 51.6081 },
+        { iata: 'DXB', city: 'Dubai', name: 'Dubai International Airport', region: 'ASIA', lat: 25.2532, lon: 55.3657 }
+      ];
+
+      // =====================================================================
+      // 2. STORAGE & LIVE-ONLY STATE
+      // =====================================================================
+      const STORAGE_KEYS = {
+        WATCHLIST: 'aeroops_live_only_watchlist_v1',
+        PREFS: 'aeroops_live_only_prefs_v1',
+        LOG: 'aeroops_live_only_log_v1'
+      };
+
+      const state = {
+        activeTab: 'BOARD', // BOARD | WATCH | SETTINGS
+        region: 'ALL',
+        airport: 'ALL',
+        movementFilter: 'ALL', // ALL | DEPARTURE | ARRIVAL
+        search: '',
+        // Strictly populated from live API responses; cleared/emptied when fetch fails
+        liveFlights: [],
+        hasLiveData: false,
+        feedState: 'IDLE', // IDLE | LIVE | ERROR
+        lastErrorDetail: 'No live fetch attempted yet. Tap Fetch Live to query live data.',
+        lastSuccessfulSync: null,
+        watchlist: loadStorage(STORAGE_KEYS.WATCHLIST, []),
+        notifLog: loadStorage(STORAGE_KEYS.LOG, []),
+        prefs: Object.assign({
+          sourceMode: 'OPENSKY', // OPENSKY | AVIATIONSTACK
+          aviationstackKey: '',
+          pollIntervalSec: 0, // 0 (Manual) | 120 | 180 | 300
+          chimeEnabled: false,
+          darkMode: true,
+          requestCount: 0
+        }, loadStorage(STORAGE_KEYS.PREFS, {})),
+        pollTimerId: null,
+        isFetching: false
+      };
+
+      function loadStorage(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (err) {
+          return fallback;
+        }
+      }
+
+      function saveStorage(key, val) {
+        try {
+          localStorage.setItem(key, JSON.stringify(val));
+        } catch (err) {
+          // Ignore storage quota / private mode restrictions
+        }
+      }
+
+      function persistPrefs() {
+        saveStorage(STORAGE_KEYS.PREFS, state.prefs);
+      }
+
+      // =====================================================================
+      // 3. NOTIFICATION CENTER (IN-APP BANNER + OPTIONAL CHIME + BROWSER PUSH)
+      // =====================================================================
+      let audioCtx = null;
+
+      function playOptionalChime() {
+        if (!state.prefs.chimeEnabled) return;
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          if (!audioCtx) audioCtx = new AudioCtx();
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+          const now = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.setValueAtTime(1174.66, now + 0.12);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.34);
+        } catch (err) {
+          // Blocked prior to user interaction
+        }
+      }
+
+      function pushInAppBanner(title, message, severity = 'info') {
+        const stack = document.getElementById('inAppAlertStack');
+        if (!stack) return;
+        const clsMap = {
+          error: 'border-rose-500/60 bg-void-900 text-rose-100',
+          warn: 'border-amber-500/60 bg-void-900 text-amber-100',
+          info: 'border-sky-500/60 bg-void-900 text-slate-100'
+        };
+        const banner = document.createElement('div');
+        banner.className = `pointer-events-auto rounded-xl border ${clsMap[severity] || clsMap.info} px-3.5 py-2.5 shadow-2xl text-xs transition-opacity duration-300`;
+        banner.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="font-bold">${escapeHtml(title)}</div>
+              <div class="opacity-90 mt-0.5 leading-snug">${escapeHtml(message)}</div>
+            </div>
+            <button type="button" class="opacity-70 hover:opacity-100 px-1 cursor-pointer" aria-label="Dismiss alert">✕</button>
+          </div>
+        `;
+        banner.querySelector('button').addEventListener('click', () => banner.remove());
+        stack.appendChild(banner);
+        setTimeout(() => {
+          banner.style.opacity = '0';
+          setTimeout(() => banner.remove(), 300);
+        }, 6000);
+      }
+
+      function notifyUser(title, message, severity = 'info', triggerBrowserPush = true) {
+        state.notifLog.unshift({
+          id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          time: formatClockHms(new Date()),
+          title,
+          message,
+          severity
+        });
+        state.notifLog = state.notifLog.slice(0, 40);
+        saveStorage(STORAGE_KEYS.LOG, state.notifLog);
+        renderNotifLog();
+
+        playOptionalChime();
+        pushInAppBanner(title, message, severity);
+
+        if (triggerBrowserPush && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(title, { body: message });
+          } catch (err) {
+            // In-app banner already shown
+          }
+        }
+      }
+
+      // =====================================================================
+      // 4. LIVE-ONLY API FETCHERS (OPENSKY & AVIATIONSTACK) — NO FALLBACK DATA
+      // =====================================================================
+      function toRadians(deg) {
+        return (deg * Math.PI) / 180;
+      }
+
+      function toDegrees(rad) {
+        return (rad * 180) / Math.PI;
+      }
+
+      // Compute distance in nautical miles between two lat/lon coordinates
+      function distanceNm(lat1, lon1, lat2, lon2) {
+        const R_NM = 3440.065;
+        const dLat = toRadians(lat2 - lat1);
+        const dLon = toRadians(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * R_NM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      // Compute bearing in degrees (0..360) from point 1 toward point 2
+      function bearingDegrees(lat1, lon1, lat2, lon2) {
+        const dLon = toRadians(lon2 - lon1);
+        const y = Math.sin(dLon) * Math.cos(toRadians(lat2));
+        const x =
+          Math.cos(toRadians(lat1)) * Math.sin(toRadians(lat2)) -
+          Math.sin(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.cos(dLon);
+        return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+      }
+
+      // Angular difference in degrees (0..180) between two headings
+      function angleDiffDegrees(a, b) {
+        const diff = Math.abs(((a - b + 180) % 360 + 360) % 360 - 180);
+        return diff;
+      }
+
+      // Infer movement direction for OpenSky ADS-B state vectors relative to selected hub or region
+      function classifyOpenSkyMovement(lat, lon, altFt, onGround, spdKt, headingDeg, vertRateFpm) {
+        const selectedHub = state.airport !== 'ALL' ? AIRPORTS.find((a) => a.iata === state.airport) : null;
+
+        if (selectedHub && typeof lat === 'number' && typeof lon === 'number') {
+          const dist = distanceNm(lat, lon, selectedHub.lat, selectedHub.lon);
+          const bearingToHub = bearingDegrees(lat, lon, selectedHub.lat, selectedHub.lon);
+          const bearingFromHub = (bearingToHub + 180) % 360;
+          const hasTrack = typeof headingDeg === 'number' && !Number.isNaN(headingDeg);
+          const hasVert = typeof vertRateFpm === 'number' && !Number.isNaN(vertRateFpm);
+
+          const isHeadingTowardHub = hasTrack && angleDiffDegrees(headingDeg, bearingToHub) <= 55;
+          const isHeadingAwayFromHub = hasTrack && angleDiffDegrees(headingDeg, bearingFromHub) <= 55;
+          const isDescending = hasVert && vertRateFpm < -180;
+          const isClimbing = hasVert && vertRateFpm > 180;
+          const isNearHub = dist <= 65;
+
+          if ((isNearHub && (isHeadingTowardHub || isDescending)) || (!onGround && dist <= 35 && isDescending)) {
+            return {
+              movementCategory: 'ARRIVAL',
+              movementBadge: 'ARRIVAL (Inbound)',
+              provenance: `Inferred ADS-B (${Math.round(dist)} NM to ${selectedHub.iata}${hasVert ? ', ' + Math.round(vertRateFpm) + ' fpm' : ''})`
+            };
+          }
+
+          if ((isNearHub && (isHeadingAwayFromHub || isClimbing)) || (onGround && dist <= 12) || (!onGround && dist <= 35 && isClimbing)) {
+            return {
+              movementCategory: 'DEPARTURE',
+              movementBadge: 'DEPARTURE (Outbound)',
+              provenance: `Inferred ADS-B (${Math.round(dist)} NM from ${selectedHub.iata}${hasVert ? ', ' + Math.round(vertRateFpm) + ' fpm' : ''})`
+            };
+          }
+
+          return {
+            movementCategory: 'TRANSIT',
+            movementBadge: 'EN ROUTE / OVERFLY',
+            provenance: `Inferred ADS-B (${Math.round(dist)} NM from ${selectedHub.iata}, transiting/en route)`
+          };
+        }
+
+        if (onGround) {
+          return {
+            movementCategory: 'DEPARTURE',
+            movementBadge: 'DEPARTURE / SURFACE',
+            provenance: 'Inferred ADS-B (on_ground = true)'
+          };
+        }
+
+        return {
+          movementCategory: 'TRANSIT',
+          movementBadge: 'EN ROUTE / OVERFLY',
+          provenance: 'Inferred ADS-B (no single hub selected; telemetry only)'
+        };
+      }
+
+      // Classify Aviationstack flight movement direction against selected hub
+      function classifyAviationstackMovement(origin, dest) {
+        const selectedHub = state.airport !== 'ALL' ? state.airport.toUpperCase() : null;
+        if (selectedHub) {
+          if (dest === selectedHub && origin !== selectedHub) {
+            return {
+              movementCategory: 'ARRIVAL',
+              movementBadge: `ARRIVAL → ${selectedHub}`,
+              provenance: `Confirmed Timetable (${origin} → ${dest})`
+            };
+          }
+          if (origin === selectedHub && dest !== selectedHub) {
+            return {
+              movementCategory: 'DEPARTURE',
+              movementBadge: `DEPARTURE · ${selectedHub} →`,
+              provenance: `Confirmed Timetable (${origin} → ${dest})`
+            };
+          }
+          if (origin === selectedHub && dest === selectedHub) {
+            return {
+              movementCategory: 'DEPARTURE',
+              movementBadge: `DEPARTURE · ${selectedHub}`,
+              provenance: `Confirmed Timetable (${origin} → ${dest})`
+            };
+          }
+          return {
+            movementCategory: 'TRANSIT',
+            movementBadge: `TRANSIT / OTHER`,
+            provenance: `Confirmed Timetable (${origin} → ${dest}; hub ${selectedHub} not endpoint)`
+          };
+        }
+
+        return {
+          movementCategory: 'DEPARTURE',
+          movementBadge: `DEPARTURE · ${origin}`,
+          provenance: `Confirmed Timetable (${origin} → ${dest})`
+        };
+      }
+
+      function getBoundingBox() {
+        if (state.airport !== 'ALL') {
+          const hub = AIRPORTS.find((a) => a.iata === state.airport);
+          if (hub) {
+            const latSpan = 1.6;
+            const lonSpan = 2.2;
+            return {
+              lamin: (hub.lat - latSpan).toFixed(4),
+              lamax: (hub.lat + latSpan).toFixed(4),
+              lomin: (hub.lon - lonSpan).toFixed(4),
+              lomax: (hub.lon + lonSpan).toFixed(4),
+              label: `${hub.iata} (${hub.city})`
+            };
+          }
+        }
+        if (state.region === 'LONDON') {
+          return { lamin: '50.80', lamax: '52.10', lomin: '-1.50', lomax: '0.70', label: 'London TMA' };
+        }
+        if (state.region === 'ASIA') {
+          return { lamin: '1.00', lamax: '38.00', lomin: '98.00', lomax: '142.00', label: 'Asia Corridor' };
+        }
+        return { lamin: '45.00', lamax: '56.50', lomin: '-2.00', lomax: '22.00', label: 'Europe & London' };
+      }
+
+      function recordApiRequest() {
+        state.prefs.requestCount = (state.prefs.requestCount || 0) + 1;
+        persistPrefs();
+        document.getElementById('settingsReqCount').textContent = `${state.prefs.requestCount} req`;
+      }
+
+      function formatHttpOrNetworkError(err, sourceName) {
+        if (err && err.name === 'AbortError') {
+          return `${sourceName} request timed out (network slow or blocked).`;
+        }
+        if (err && typeof err.message === 'string' && err.message.trim()) {
+          // Browsers often mask CORS/TLS/offline failures as "Failed to fetch"
+          if (err.message.toLowerCase().includes('failed to fetch')) {
+            return `${sourceName} fetch failed or was blocked (check internet connection, CORS policy, or content blockers).`;
+          }
+          return err.message;
+        }
+        return `${sourceName} live fetch failed due to an unknown error.`;
+      }
+
+      async function fetchOpenSkyLive() {
+        const bbox = getBoundingBox();
+        const url = `https://opensky-network.org/api/states/all?lamin=${bbox.lamin}&lomin=${bbox.lomin}&lamax=${bbox.lamax}&lomax=${bbox.lomax}`;
+        recordApiRequest();
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        let response;
+        try {
+          response = await fetch(url, { signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (!response.ok) {
+          const rateHint = response.status === 429 ? ' — OpenSky rate limit exceeded, wait and retry' : '';
+          throw new Error(`HTTP ${response.status} from OpenSky Network${rateHint}.`);
+        }
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          throw new Error('OpenSky Network returned invalid JSON.');
+        }
+
+        const states = Array.isArray(data.states) ? data.states : [];
+        if (states.length === 0) {
+          throw new Error(`OpenSky returned 0 live ADS-B aircraft in ${bbox.label}.`);
+        }
+
+        const mapped = states.map((s, idx) => {
+          const callsign = String(s[1] || '').trim().toUpperCase() || `ICAO-${String(s[0] || idx).toUpperCase()}`;
+          const country = String(s[2] || 'Unknown').trim();
+          const lon = typeof s[5] === 'number' ? s[5] : null;
+          const lat = typeof s[6] === 'number' ? s[6] : null;
+          const altFt = typeof s[7] === 'number' ? Math.round(s[7] * 3.28084) : null;
+          const onGround = Boolean(s[8]);
+          const spdKt = typeof s[9] === 'number' ? Math.round(s[9] * 1.94384) : null;
+          const headingDeg = typeof s[10] === 'number' ? s[10] : null;
+          const vertRateFpm = typeof s[11] === 'number' ? Math.round(s[11] * 196.85) : null;
+          const posStr = lat !== null && lon !== null ? `${lat.toFixed(2)}°, ${lon.toFixed(2)}°` : 'Coordinates N/A';
+
+          const moveInfo = classifyOpenSkyMovement(lat, lon, altFt, onGround, spdKt, headingDeg, vertRateFpm);
+          const selectedHub = state.airport !== 'ALL' ? state.airport : null;
+          const originLabel = moveInfo.movementCategory === 'DEPARTURE' && selectedHub
+            ? selectedHub
+            : (state.airport !== 'ALL' ? state.airport : bbox.label);
+          const destLabel = moveInfo.movementCategory === 'ARRIVAL' && selectedHub
+            ? selectedHub
+            : (onGround ? 'ON GROUND' : 'AIRBORNE');
+
+          return {
+            id: `live-os-${String(s[0] || idx)}-${idx}`,
+            code: callsign,
+            callsign,
+            airline: `${country} · OpenSky ADS-B`,
+            origin: originLabel,
+            dest: destLabel,
+            selectedHub: selectedHub || '',
+            movementCategory: moveInfo.movementCategory,
+            movementBadge: moveInfo.movementBadge,
+            provenance: moveInfo.provenance,
+            schedTime: formatClockHhMm(new Date()),
+            estTime: altFt !== null ? `${altFt.toLocaleString()} ft` : 'Alt N/A',
+            gate: spdKt !== null ? `${spdKt} kt` : 'Spd N/A',
+            status: onGround ? 'On Ground' : 'Airborne',
+            detail: `${posStr} · ${altFt !== null ? altFt.toLocaleString() + ' ft' : 'Alt N/A'} · ${spdKt !== null ? spdKt + ' kt' : 'Spd N/A'}`
+          };
+        });
+
+        state.liveFlights = mapped;
+        state.hasLiveData = true;
+        state.feedState = 'LIVE';
+        state.lastSuccessfulSync = formatClockHms(new Date());
+        state.lastErrorDetail = `Live OpenSky ADS-B: ${mapped.length} aircraft in ${bbox.label}.`;
+
+        reconcileWatchlistWithLiveData(mapped);
+      }
+
+      async function fetchAviationstackLive() {
+        const key = (state.prefs.aviationstackKey || '').trim();
+        if (!key) {
+          throw new Error('Missing Aviationstack access_key. Enter your key in Settings.');
+        }
+
+        const iata = state.airport !== 'ALL'
+          ? state.airport
+          : (state.region === 'ASIA' ? 'SIN' : (state.region === 'LONDON' ? 'LHR' : 'FRA'));
+
+        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        const url = `${protocol}//api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(key)}&dep_iata=${encodeURIComponent(iata)}&limit=50`;
+        recordApiRequest();
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        let response;
+        try {
+          response = await fetch(url, { signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (!response.ok) {
+          const rateHint = response.status === 429 ? ' — Aviationstack rate/quota limit reached' : '';
+          throw new Error(`HTTP ${response.status} from Aviationstack${rateHint}.`);
+        }
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          throw new Error('Aviationstack returned invalid JSON.');
+        }
+
+        if (data && data.error) {
+          const apiMsg = data.error.message || data.error.code || 'API rejected request';
+          throw new Error(`Aviationstack error: ${apiMsg}`);
+        }
+
+        const rows = Array.isArray(data.data) ? data.data : [];
+        if (rows.length === 0) {
+          throw new Error(`Aviationstack returned 0 live flights for ${iata}.`);
+        }
+
+        const mapped = rows.map((row, idx) => {
+          const dep = row.departure || {};
+          const arr = row.arrival || {};
+          const flt = row.flight || {};
+          const air = row.airline || {};
+          const code = String(flt.iata || flt.icao || `FLT-${idx + 1}`).toUpperCase();
+          const origin = String(dep.iata || iata).toUpperCase();
+          const dest = String(arr.iata || '---').toUpperCase();
+          const moveInfo = classifyAviationstackMovement(origin, dest);
+          const sched = extractHhMm(dep.scheduled);
+          const est = extractHhMm(dep.estimated || dep.actual || dep.scheduled);
+          const delayMins = Number.isFinite(Number(dep.delay)) && Number(dep.delay) > 0 ? Number(dep.delay) : 0;
+          const rawStatus = String(row.flight_status || '').toUpperCase();
+
+          let status = rawStatus || 'SCHEDULED';
+          if (rawStatus.includes('CANCEL')) status = 'Cancelled';
+          else if (delayMins > 0 || rawStatus.includes('DELAY')) status = `Delayed +${delayMins}m`;
+          else if (rawStatus.includes('ACTIVE')) status = 'Active';
+          else if (rawStatus.includes('SCHEDULED')) status = 'Scheduled';
+
+          return {
+            id: `live-as-${code}-${idx}`,
+            code,
+            callsign: String(flt.icao || code).toUpperCase(),
+            airline: air.name || 'Live Carrier',
+            origin,
+            dest,
+            selectedHub: state.airport !== 'ALL' ? state.airport : iata,
+            movementCategory: moveInfo.movementCategory,
+            movementBadge: moveInfo.movementBadge,
+            provenance: moveInfo.provenance,
+            schedTime: sched,
+            estTime: est,
+            gate: dep.gate || 'TBD',
+            status,
+            detail: `${dep.terminal ? 'Term ' + dep.terminal + ' · ' : ''}Gate ${dep.gate || 'TBD'} · Sched ${sched}${est !== sched ? ' · Est ' + est : ''}`
+          };
+        });
+
+        state.liveFlights = mapped;
+        state.hasLiveData = true;
+        state.feedState = 'LIVE';
+        state.lastSuccessfulSync = formatClockHms(new Date());
+        state.lastErrorDetail = `Live Aviationstack: ${mapped.length} flights for ${iata}.`;
+
+        reconcileWatchlistWithLiveData(mapped);
+      }
+
+      async function performLiveFetch() {
+        if (state.isFetching) return;
+        state.isFetching = true;
+
+        const icon = document.getElementById('refreshIcon');
+        icon.classList.add('animate-spin');
+        renderHeaderAndBanner();
+
+        const mode = state.prefs.sourceMode === 'AVIATIONSTACK' ? 'AVIATIONSTACK' : 'OPENSKY';
+        const sourceLabel = mode === 'AVIATIONSTACK' ? 'Aviationstack' : 'OpenSky Network';
+
+        try {
+          if (mode === 'AVIATIONSTACK') {
+            await fetchAviationstackLive();
+          } else {
+            await fetchOpenSkyLive();
+          }
+        } catch (err) {
+          const reason = formatHttpOrNetworkError(err, sourceLabel);
+          // Strictly clear live flight rows on failure so stale or fake data is never shown as fresh live data
+          state.liveFlights = [];
+          state.hasLiveData = false;
+          state.feedState = 'ERROR';
+          state.lastErrorDetail = reason;
+
+          notifyUser('Live Fetch Failed', reason, 'error', true);
+        } finally {
+          state.isFetching = false;
+          icon.classList.remove('animate-spin');
+          renderAll();
+        }
+      }
+
+      // =====================================================================
+      // 5. MY FLIGHTS WATCHLIST (ONLY UPDATES FROM REAL LIVE MATCHES)
+      // =====================================================================
+      function reconcileWatchlistWithLiveData(liveList) {
+        let updatedAny = false;
+        state.watchlist.forEach((w) => {
+          const target = w.code.toUpperCase();
+          const match = liveList.find((lf) =>
+            lf.code.toUpperCase() === target || (lf.callsign && lf.callsign.toUpperCase() === target)
+          );
+          if (!match) return;
+
+          const changes = [];
+          if (w.liveStatus && w.liveStatus !== match.status) {
+            changes.push(`Status: ${w.liveStatus} → ${match.status}`);
+          }
+          if (w.liveGate && w.liveGate !== 'TBD' && match.gate && match.gate !== 'TBD' && w.liveGate !== match.gate) {
+            changes.push(`Gate: ${w.liveGate} → ${match.gate}`);
+          }
+          if (w.liveDetail && w.liveDetail !== match.detail) {
+            changes.push(match.detail);
+          }
+
+          w.liveStatus = match.status;
+          w.liveGate = match.gate || 'TBD';
+          w.liveEstTime = match.estTime || w.schedTime;
+          w.liveDetail = match.detail;
+          w.movementCategory = match.movementCategory || w.movementCategory || 'TRANSIT';
+          w.movementBadge = match.movementBadge || w.movementBadge || '';
+          w.provenance = match.provenance || w.provenance || '';
+          w.lastMatchedAt = formatClockHms(new Date());
+          updatedAny = true;
+
+          if (w.alertsEnabled && changes.length > 0) {
+            notifyUser(
+              `Watched Flight Update: ${w.code}`,
+              `${w.origin} → ${w.dest} [${match.movementBadge || match.movementCategory || 'LIVE'}]: ${changes.join(' · ')}`,
+              'warn',
+              true
+            );
+          }
+        });
+
+        if (updatedAny) {
+          saveStorage(STORAGE_KEYS.WATCHLIST, state.watchlist);
+        }
+      }
+
+      function addWatchlistItem(entry) {
+        const code = entry.code.trim().toUpperCase();
+        const existingIdx = state.watchlist.findIndex((item) => item.code.toUpperCase() === code);
+        const item = {
+          id: existingIdx >= 0 ? state.watchlist[existingIdx].id : ('w-' + Date.now()),
+          code,
+          airline: (entry.airline || 'Tracked Flight').trim(),
+          origin: entry.origin.trim().toUpperCase(),
+          dest: entry.dest.trim().toUpperCase(),
+          schedTime: entry.schedTime.trim(),
+          liveStatus: existingIdx >= 0 ? state.watchlist[existingIdx].liveStatus : 'Awaiting Live Match',
+          liveGate: existingIdx >= 0 ? state.watchlist[existingIdx].liveGate : 'TBD',
+          liveEstTime: existingIdx >= 0 ? state.watchlist[existingIdx].liveEstTime : entry.schedTime.trim(),
+          liveDetail: existingIdx >= 0 ? state.watchlist[existingIdx].liveDetail : 'Not matched in current live fetch',
+          lastMatchedAt: existingIdx >= 0 ? state.watchlist[existingIdx].lastMatchedAt : null,
+          alertsEnabled: existingIdx >= 0 ? state.watchlist[existingIdx].alertsEnabled : true
+        };
+
+        if (existingIdx >= 0) {
+          state.watchlist[existingIdx] = item;
+          pushInAppBanner('Watchlist Updated', `${code} updated in My Flights.`, 'info');
+        } else {
+          state.watchlist.unshift(item);
+          pushInAppBanner('Flight Tracked', `${code} added to My Flights. Will update only from live data.`, 'info');
+        }
+
+        if (state.hasLiveData && state.liveFlights.length > 0) {
+          reconcileWatchlistWithLiveData(state.liveFlights);
+        }
+
+        saveStorage(STORAGE_KEYS.WATCHLIST, state.watchlist);
+        renderWatchlist();
+        renderBoard();
+        updateMetrics();
+      }
+
+      // =====================================================================
+      // 6. RENDERING FUNCTIONS
+      // =====================================================================
+      function renderAll() {
+        applyTheme();
+        renderHeaderAndBanner();
+        renderHubPills();
+        renderSelectedHubBar();
+        renderBoard();
+        renderWatchlist();
+        renderNotifLog();
+        renderSettingsTab();
+        updateMetrics();
+      }
+
+      function applyTheme() {
+        document.documentElement.classList.toggle('dark', Boolean(state.prefs.darkMode));
+      }
+
+      function renderHeaderAndBanner() {
+        const pill = document.getElementById('liveStatusPill');
+        const dot = document.getElementById('liveStatusDot');
+        const label = document.getElementById('liveStatusLabel');
+        const meta = document.getElementById('headerMetaText');
+        const banner = document.getElementById('topDiagnosticBanner');
+        const bannerMsg = document.getElementById('topDiagnosticMessage');
+        const retryBtn = document.getElementById('bannerRetryBtn');
+        const refreshText = document.getElementById('headerRefreshText');
+
+        const sourceName = state.prefs.sourceMode === 'AVIATIONSTACK' ? 'Aviationstack' : 'OpenSky ADS-B';
+        const syncLabel = state.lastSuccessfulSync || 'Never';
+        if (meta) meta.textContent = `Last live sync: ${syncLabel} · ${sourceName}`;
+        if (refreshText) refreshText.textContent = state.isFetching ? 'Fetching...' : 'Fetch Live';
+
+        if (!pill || !dot || !label || !banner || !bannerMsg || !retryBtn) {
+          return;
+        }
+
+        if (state.isFetching) {
+          label.textContent = 'FETCHING';
+          pill.className = 'relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30';
+          dot.className = 'relative w-1.5 h-1.5 rounded-full bg-sky-400 pulse-ring';
+          banner.className = 'border-t border-sky-500/30 bg-sky-500/10 px-3.5 py-2';
+          bannerMsg.className = 'font-medium leading-snug text-sky-800 dark:text-sky-200';
+          bannerMsg.textContent = `Querying ${sourceName} for live flight data...`;
+          retryBtn.className = 'shrink-0 min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold border border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-200 cursor-pointer';
+        } else if (state.feedState === 'LIVE' && state.hasLiveData) {
+          label.textContent = 'LIVE ONLY';
+          pill.className = 'relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/35';
+          dot.className = 'relative w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-ring';
+          banner.className = 'border-t border-emerald-500/25 bg-emerald-500/10 px-3.5 py-2';
+          bannerMsg.className = 'font-medium leading-snug text-emerald-900 dark:text-emerald-200';
+          bannerMsg.textContent = `${state.lastErrorDetail} (Last live sync: ${syncLabel})`;
+          retryBtn.className = 'shrink-0 min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold border border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/25 transition cursor-pointer';
+        } else if (state.feedState === 'ERROR') {
+          label.textContent = 'LIVE ERROR';
+          pill.className = 'relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/35';
+          dot.className = 'relative w-1.5 h-1.5 rounded-full bg-rose-500';
+          banner.className = 'border-t border-rose-500/35 bg-rose-500/10 px-3.5 py-2';
+          bannerMsg.className = 'font-medium leading-snug text-rose-900 dark:text-rose-200';
+          bannerMsg.textContent = `Not updating: ${state.lastErrorDetail} Last live sync: ${syncLabel}.`;
+          retryBtn.className = 'shrink-0 min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold border border-rose-500/40 bg-rose-600 text-white hover:bg-rose-500 transition cursor-pointer';
+        } else {
+          label.textContent = 'NO LIVE DATA';
+          pill.className = 'relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/35';
+          dot.className = 'relative w-1.5 h-1.5 rounded-full bg-amber-400';
+          banner.className = 'border-t border-amber-500/30 bg-amber-500/10 px-3.5 py-2';
+          bannerMsg.className = 'font-medium leading-snug text-amber-900 dark:text-amber-200';
+          bannerMsg.textContent = `${state.lastErrorDetail} Last live sync: ${syncLabel}.`;
+          retryBtn.className = 'shrink-0 min-h-[32px] px-2.5 rounded-lg text-[11px] font-bold border border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-200 hover:bg-amber-500/25 transition cursor-pointer';
+        }
+      }
+
+      function renderHubPills() {
+        const container = document.getElementById('hubPillsContainer');
+        if (!container) return;
+        const hubs = state.region === 'ALL'
+          ? AIRPORTS
+          : AIRPORTS.filter((a) => a.region === state.region);
+
+        const countSpan = document.getElementById('hubCountSpan');
+        if (countSpan) countSpan.textContent = String(hubs.length);
+
+        container.innerHTML = hubs.map((hub) => {
+          const isActive = state.airport === hub.iata;
+          return `
+            <button
+              type="button"
+              data-hub-iata="${hub.iata}"
+              class="hub-pill-btn min-h-[40px] px-3 rounded-xl border text-left shrink-0 flex items-center gap-2 transition cursor-pointer ${
+                isActive
+                  ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                  : 'bg-slate-50 hover:bg-slate-100 dark:bg-void-850 dark:hover:bg-void-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+              }"
+            >
+              <span class="font-mono font-bold text-xs">${hub.iata}</span>
+              <span class="text-xs font-medium">${escapeHtml(hub.city.replace(/^London\s+/, ''))}</span>
+            </button>
+          `;
+        }).join('');
+
+        container.querySelectorAll('.hub-pill-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const iata = btn.getAttribute('data-hub-iata');
+            state.airport = state.airport === iata ? 'ALL' : iata;
+            renderHubPills();
+            renderSelectedHubBar();
+            renderBoard();
+            performLiveFetch();
+          });
+        });
+      }
+
+      function renderSelectedHubBar() {
+        const bar = document.getElementById('selectedHubBar');
+        if (!bar) return;
+        if (state.airport === 'ALL') {
+          bar.classList.add('hidden');
+          return;
+        }
+        const hub = AIRPORTS.find((a) => a.iata === state.airport);
+        if (!hub) {
+          bar.classList.add('hidden');
+          return;
+        }
+        bar.classList.remove('hidden');
+        document.getElementById('hubBarIata').textContent = hub.iata;
+        document.getElementById('hubBarCity').textContent = hub.city;
+        document.getElementById('hubBarRegion').textContent = hub.region;
+        document.getElementById('hubBarName').textContent = hub.name;
+        document.getElementById('hubBarBox').textContent = `${hub.lat.toFixed(2)}°, ${hub.lon.toFixed(2)}°`;
+      }
+
+      function formatRouteHighlight(origin, dest, activeHub) {
+        const safeOrigin = escapeHtml(origin);
+        const safeDest = escapeHtml(dest);
+        if (activeHub && origin.toUpperCase() === activeHub.toUpperCase()) {
+          return `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/40">${safeOrigin}</span><span class="text-slate-400 mx-1">→</span><span>${safeDest}</span>`;
+        }
+        if (activeHub && dest.toUpperCase() === activeHub.toUpperCase()) {
+          return `<span>${safeOrigin}</span><span class="text-slate-400 mx-1">→</span><span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/40">${safeDest}</span>`;
+        }
+        return `<span>${safeOrigin}</span><span class="text-slate-400 mx-1">→</span><span>${safeDest}</span>`;
+      }
+
+      function movementPillStyle(movementCategory) {
+        if (movementCategory === 'DEPARTURE') {
+          return 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/35';
+        }
+        if (movementCategory === 'ARRIVAL') {
+          return 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/35';
+        }
+        return 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/35';
+      }
+
+      function getSearchFilteredLiveFlights() {
+        if (!state.hasLiveData || !Array.isArray(state.liveFlights) || state.liveFlights.length === 0) {
+          return [];
+        }
+        const q = state.search.trim().toLowerCase();
+        return state.liveFlights.filter((f) => {
+          if (!q) return true;
+          return (
+            f.code.toLowerCase().includes(q) ||
+            (f.callsign || '').toLowerCase().includes(q) ||
+            f.airline.toLowerCase().includes(q) ||
+            f.origin.toLowerCase().includes(q) ||
+            f.dest.toLowerCase().includes(q) ||
+            f.status.toLowerCase().includes(q) ||
+            (f.movementBadge || '').toLowerCase().includes(q) ||
+            f.detail.toLowerCase().includes(q)
+          );
+        });
+      }
+
+      function getFilteredLiveFlights() {
+        const searchMatches = getSearchFilteredLiveFlights();
+        if (state.movementFilter === 'ALL') return searchMatches;
+        return searchMatches.filter((f) => f.movementCategory === state.movementFilter);
+      }
+
+      function updateMovementCountsAndLabels() {
+        const baseList = getSearchFilteredLiveFlights();
+        const depCount = baseList.filter((f) => f.movementCategory === 'DEPARTURE').length;
+        const arrCount = baseList.filter((f) => f.movementCategory === 'ARRIVAL').length;
+        const allCount = baseList.length;
+
+        document.getElementById('countMoveAll').textContent = String(allCount);
+        document.getElementById('countMoveDep').textContent = String(depCount);
+        document.getElementById('countMoveArr').textContent = String(arrCount);
+        document.getElementById('metricDepArrBreakdown').textContent = `${depCount} DEP · ${arrCount} ARR`;
+
+        const ctxLabel = document.getElementById('directionContextLabel');
+        if (state.airport !== 'ALL') {
+          ctxLabel.textContent = `Hub ${state.airport}`;
+        } else if (state.region !== 'ALL') {
+          ctxLabel.textContent = `Region ${state.region}`;
+        } else {
+          ctxLabel.textContent = 'All Hubs / Region';
+        }
+      }
+
+      function renderBoard() {
+        updateMovementCountsAndLabels();
+        const emptyCard = document.getElementById('liveEmptyStateCard');
+        const listEl = document.getElementById('liveFlightsContainer');
+        const emptyTitle = document.getElementById('emptyStateTitle');
+        const emptyReason = document.getElementById('emptyStateReason');
+        const emptySync = document.getElementById('emptyStateLastSync');
+        const emptySource = document.getElementById('emptyStateSource');
+
+        emptySync.textContent = state.lastSuccessfulSync || 'Never';
+        emptySource.textContent = state.prefs.sourceMode === 'AVIATIONSTACK'
+          ? 'Aviationstack Timetable API'
+          : 'OpenSky Network ADS-B';
+
+        if (!state.hasLiveData || state.liveFlights.length === 0) {
+          listEl.classList.add('hidden');
+          listEl.innerHTML = '';
+          emptyCard.classList.remove('hidden');
+          emptyTitle.textContent = state.feedState === 'ERROR'
+            ? 'Live Data Unavailable — Board Left Empty'
+            : 'No Live Flight Data Fetched Yet';
+          emptyReason.textContent = state.lastErrorDetail;
+          document.getElementById('metricLiveRows').textContent = '0';
+          return;
+        }
+
+        const visibleRows = getFilteredLiveFlights();
+        document.getElementById('metricLiveRows').textContent = String(visibleRows.length);
+
+        if (visibleRows.length === 0) {
+          listEl.classList.add('hidden');
+          listEl.innerHTML = '';
+          emptyCard.classList.remove('hidden');
+          emptyTitle.textContent = '0 Live Flights Match Active Filters';
+          emptyReason.textContent = `No live flights match movement (${state.movementFilter})${state.search ? ` or search "${state.search}"` : ''}. Switch movement filter to All or tap Retry.`;
+          return;
+        }
+
+        emptyCard.classList.add('hidden');
+        listEl.classList.remove('hidden');
+
+        const watchedCodes = new Set(state.watchlist.map((w) => w.code.toUpperCase()));
+        const activeHub = state.airport !== 'ALL' ? state.airport : null;
+
+        listEl.innerHTML = visibleRows.map((f) => {
+          const isWatched = watchedCodes.has(f.code.toUpperCase());
+          const moveLabel = f.movementBadge || f.movementCategory || 'TRANSIT';
+          return `
+            <article class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-sm space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-mono font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(f.code)}</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${movementPillStyle(f.movementCategory)}">
+                      ${escapeHtml(moveLabel)}
+                    </span>
+                    <span class="font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(f.estTime)}</span>
+                  </div>
+                  <div class="font-mono text-xs font-bold text-sky-600 dark:text-sky-400 mt-1 flex items-center flex-wrap">
+                    ${formatRouteHighlight(f.origin, f.dest, activeHub)}
+                  </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">${escapeHtml(f.airline)}</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
+                  ${escapeHtml(f.status)}
+                </span>
+              </div>
+
+              <div class="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-void-850 px-2.5 py-1.5 rounded-lg space-y-0.5">
+                <div class="truncate">${escapeHtml(f.detail)}</div>
+                <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${escapeHtml(f.provenance || '')}</div>
+              </div>
+
+              <div class="flex items-center justify-end gap-2 pt-0.5">
+                <button
+                  type="button"
+                  data-flight-id="${f.id}"
+                  class="track-live-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold border transition cursor-pointer shrink-0 ${
+                    isWatched
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-void-850 dark:hover:bg-void-800 border-slate-200 dark:border-slate-700'
+                  }"
+                >
+                  ${isWatched ? '★ Tracking' : '+ Track'}
+                </button>
+              </div>
+            </article>
+          `;
+        }).join('');
+
+        listEl.querySelectorAll('.track-live-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const fid = btn.getAttribute('data-flight-id');
+            const found = state.liveFlights.find((x) => x.id === fid);
+            if (!found) return;
+            addWatchlistItem({
+              code: found.code,
+              airline: found.airline,
+              origin: found.origin,
+              dest: found.dest,
+              schedTime: found.schedTime
+            });
+            reconcileWatchlistWithLiveData(state.liveFlights);
+            renderWatchlist();
+          });
+        });
+      }
+
+      function renderWatchlist() {
+        const container = document.getElementById('watchlistItemsContainer');
+        if (state.watchlist.length === 0) {
+          container.innerHTML = `
+            <div class="rounded-2xl bg-white dark:bg-void-900 border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center text-xs text-slate-500 dark:text-slate-400">
+              No flights in My Flights yet. Tap <strong>+ Track Flight</strong> or <strong>+ Track</strong> on a live flight row.
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = state.watchlist.map((w) => {
+          const matchedBadge = w.lastMatchedAt
+            ? `Live matched @ ${escapeHtml(w.lastMatchedAt)}`
+            : 'No live match yet (never simulated)';
+          const moveTag = w.movementBadge || w.movementCategory || '';
+
+          return `
+            <article class="rounded-2xl bg-white dark:bg-void-900 border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-sm space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono font-bold text-sm">${escapeHtml(w.code)}</span>
+                    ${moveTag ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${movementPillStyle(w.movementCategory)}">${escapeHtml(moveTag)}</span>` : ''}
+                    <span class="font-mono text-xs font-bold text-sky-600 dark:text-sky-400">${escapeHtml(w.origin)} → ${escapeHtml(w.dest)}</span>
+                    <span class="font-mono text-xs text-slate-500 dark:text-slate-400">Sched ${escapeHtml(w.schedTime)}</span>
+                  </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    ${escapeHtml(w.airline)} · <span class="font-mono font-semibold text-slate-800 dark:text-slate-200">Gate ${escapeHtml(w.liveGate || 'TBD')}</span>
+                  </div>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border shrink-0 ${
+                  w.lastMatchedAt
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30'
+                }">
+                  ${escapeHtml(w.liveStatus || 'Awaiting Live Match')}
+                </span>
+              </div>
+
+              <div class="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-void-850 px-2.5 py-1.5 rounded-lg space-y-0.5">
+                <div>${escapeHtml(w.liveDetail || 'Not matched in current live fetch')} · <span class="text-slate-400">${matchedBadge}</span></div>
+                ${w.provenance ? `<div class="text-[10px] text-slate-500 dark:text-slate-400">${escapeHtml(w.provenance)}</div>` : ''}
+              </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    ${escapeHtml(w.airline)} · <span class="font-mono font-semibold text-slate-800 dark:text-slate-200">Gate ${escapeHtml(w.liveGate || 'TBD')}</span>
+                  </div>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border shrink-0 ${
+                  w.lastMatchedAt
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30'
+                }">
+                  ${escapeHtml(w.liveStatus || 'Awaiting Live Match')}
+                </span>
+              </div>
+                <div class="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-void-850 px-2.5 py-1.5 rounded-lg space-y-0.5">
+                <div class="truncate">${escapeHtml(w.liveDetail || 'Not matched in current live fetch')} · <span class="text-slate-400">${matchedBadge}</span></div>
+                ${w.provenance ? `<div class="text-[10px] text-slate-500 dark:text-slate-400">${escapeHtml(w.provenance)}</div>` : ''}
+              </div>
+
+              <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  data-watch-alert-id="${w.id}"
+                  class="watch-alert-toggle min-h-[36px] px-3 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                    w.alertsEnabled
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                      : 'bg-slate-100 dark:bg-void-850 text-slate-500 border-slate-200 dark:border-slate-700'
+                  }"
+                >
+                  ${w.alertsEnabled ? '🔔 Alerts ON' : '🔕 Alerts OFF'}
+                </button>
+                <button
+                  type="button"
+                  data-watch-del-id="${w.id}"
+                  class="watch-del-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            </article>
+          `;
+        }).join('');
+
+        container.querySelectorAll('.watch-alert-toggle').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-watch-alert-id');
+            const target = state.watchlist.find((x) => x.id === id);
+            if (!target) return;
+            target.alertsEnabled = !target.alertsEnabled;
+            saveStorage(STORAGE_KEYS.WATCHLIST, state.watchlist);
+            renderWatchlist();
+          });
+        });
+
+        container.querySelectorAll('.watch-del-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-watch-del-id');
+            state.watchlist = state.watchlist.filter((x) => x.id !== id);
+            saveStorage(STORAGE_KEYS.WATCHLIST, state.watchlist);
+            renderWatchlist();
+            renderBoard();
+            updateMetrics();
+          });
+        });
+      }
+
+      function renderNotifLog() {
+        const container = document.getElementById('notifLogContainer');
+        if (state.notifLog.length === 0) {
+          container.innerHTML = `<div class="text-xs text-slate-400 py-3 text-center">No notifications or fetch events logged yet.</div>`;
+          return;
+        }
+        container.innerHTML = state.notifLog.map((n) => `
+          <div class="rounded-xl p-2.5 bg-slate-50 dark:bg-void-850 border border-slate-200/70 dark:border-slate-800 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold">${escapeHtml(n.title)}</span>
+              <span class="font-mono text-[10px] text-slate-400">${escapeHtml(n.time)}</span>
+            </div>
+            <div class="text-slate-600 dark:text-slate-300 mt-0.5">${escapeHtml(n.message)}</div>
+          </div>
+        `).join('');
+      }
+
+      function renderSettingsTab() {
+        document.querySelectorAll('input[name="liveSourceMode"]').forEach((radio) => {
+          radio.checked = radio.value === state.prefs.sourceMode;
+        });
+        document.getElementById('aviationstackApiKeyInput').value = state.prefs.aviationstackKey || '';
+        document.getElementById('pollIntervalSelect').value = String(state.prefs.pollIntervalSec || 0);
+        document.getElementById('audioChimeCheckbox').checked = Boolean(state.prefs.chimeEnabled);
+        document.getElementById('darkThemeCheckbox').checked = Boolean(state.prefs.darkMode);
+        document.getElementById('settingsReqCount').textContent = `${state.prefs.requestCount || 0} req`;
+
+        const permEl = document.getElementById('browserNotifPermText');
+        if (!('Notification' in window)) {
+          permEl.textContent = 'Browser Notification API unavailable (In-app banners active)';
+        } else {
+          permEl.textContent = `Permission: ${Notification.permission.toUpperCase()}`;
+        }
+      }
+
+      function updateMetrics() {
+        const watchCount = String(state.watchlist.length);
+        const metricWatched = document.getElementById('metricWatchedRows');
+        const navPill = document.getElementById('navWatchCountPill');
+        const metricSync = document.getElementById('metricLastSync');
+        if (metricWatched) metricWatched.textContent = watchCount;
+        if (navPill) navPill.textContent = watchCount;
+        if (metricSync) metricSync.textContent = state.lastSuccessfulSync || 'Never';
+      }
+
+      // =====================================================================
+      // 7. NAVIGATION, POLLING & EVENT WIRING
+      // =====================================================================
+      function closeBlockingOverlays() {
+        const hostModal = document.getElementById('iphoneHostModal');
+        if (hostModal && !hostModal.classList.contains('hidden')) {
+          hostModal.classList.add('hidden');
+        }
+      }
+
+      function switchTab(tab) {
+        const normalized = ['BOARD', 'WATCH', 'SETTINGS'].includes(tab) ? tab : 'BOARD';
+        state.activeTab = normalized;
+        closeBlockingOverlays();
+
+        const boardSec = document.getElementById('tabBoard');
+        const watchSec = document.getElementById('tabWatchlist');
+        const settingsSec = document.getElementById('tabSettings');
+
+        if (boardSec) boardSec.classList.toggle('hidden', normalized !== 'BOARD');
+        if (watchSec) watchSec.classList.toggle('hidden', normalized !== 'WATCH');
+        if (settingsSec) {
+          settingsSec.classList.toggle('hidden', normalized !== 'SETTINGS');
+          if (normalized === 'SETTINGS') {
+            settingsSec.style.display = '';
+            settingsSec.style.pointerEvents = 'auto';
+            settingsSec.style.opacity = '1';
+            renderSettingsTab();
+          }
+        }
+
+        const activeCls = 'min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 transition cursor-pointer pointer-events-auto';
+        const idleCls = 'min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-void-850 transition cursor-pointer pointer-events-auto';
+
+        const navBoard = document.getElementById('navTabBoard');
+        const navWatch = document.getElementById('navTabWatch');
+        const navSettings = document.getElementById('navTabSettings');
+
+        if (navBoard) {
+          navBoard.className = normalized === 'BOARD' ? activeCls : idleCls;
+          navBoard.setAttribute('aria-current', normalized === 'BOARD' ? 'page' : 'false');
+        }
+        if (navWatch) {
+          navWatch.className = normalized === 'WATCH' ? activeCls : idleCls;
+          navWatch.setAttribute('aria-current', normalized === 'WATCH' ? 'page' : 'false');
+        }
+        if (navSettings) {
+          navSettings.className = normalized === 'SETTINGS' ? activeCls : idleCls;
+          navSettings.setAttribute('aria-current', normalized === 'SETTINGS' ? 'page' : 'false');
+        }
+
+        if (normalized === 'SETTINGS' && settingsSec) {
+          try {
+            settingsSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (err) {
+            window.scrollTo(0, 0);
+          }
+        }
+      }
+
+      function setupPollTimer() {
+        if (state.pollTimerId) {
+          clearInterval(state.pollTimerId);
+          state.pollTimerId = null;
+        }
+        const sec = Number(state.prefs.pollIntervalSec || 0);
+        if (sec > 0) {
+          state.pollTimerId = setInterval(() => {
+            performLiveFetch();
+          }, sec * 1000);
+        }
+      }
+
+      function bindEvents() {
+        // Delegated navigation listener for Settings, Live Board, and My Flights across mobile & desktop
+        document.addEventListener('click', (e) => {
+          const targetBtn = e.target && typeof e.target.closest === 'function'
+            ? e.target.closest('#navTabSettings, #navTabBoard, #navTabWatch, #emptyOpenSettingsBtn, [data-open-tab]')
+            : null;
+          if (!targetBtn) return;
+
+          const explicitTab = targetBtn.getAttribute('data-open-tab');
+          if (explicitTab) {
+            e.preventDefault();
+            switchTab(explicitTab);
+            return;
+          }
+          if (targetBtn.id === 'navTabSettings' || targetBtn.id === 'emptyOpenSettingsBtn') {
+            e.preventDefault();
+            switchTab('SETTINGS');
+          } else if (targetBtn.id === 'navTabBoard') {
+            e.preventDefault();
+            switchTab('BOARD');
+          } else if (targetBtn.id === 'navTabWatch') {
+            e.preventDefault();
+            switchTab('WATCH');
+          }
+        });
+
+        // Direct listeners as well
+        const navBoardBtn = document.getElementById('navTabBoard');
+        const navWatchBtn = document.getElementById('navTabWatch');
+        const navSettingsBtn = document.getElementById('navTabSettings');
+        if (navBoardBtn) navBoardBtn.addEventListener('click', () => switchTab('BOARD'));
+        if (navWatchBtn) navWatchBtn.addEventListener('click', () => switchTab('WATCH'));
+        if (navSettingsBtn) navSettingsBtn.addEventListener('click', () => switchTab('SETTINGS'));
+
+        // Refresh & Retry triggers
+        document.getElementById('headerRefreshBtn').addEventListener('click', () => performLiveFetch());
+        document.getElementById('bannerRetryBtn').addEventListener('click', () => performLiveFetch());
+        document.getElementById('emptyRetryBtn').addEventListener('click', () => performLiveFetch());
+        document.getElementById('emptyOpenSettingsBtn').addEventListener('click', () => switchTab('SETTINGS'));
+
+        // Region & Hub filters
+        document.querySelectorAll('.region-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.region = btn.getAttribute('data-region');
+            state.airport = 'ALL';
+            document.querySelectorAll('.region-btn').forEach((b) => {
+              const selected = b.getAttribute('data-region') === state.region;
+              b.className = selected
+                ? 'region-btn min-h-[38px] rounded-lg text-xs font-bold transition cursor-pointer bg-white dark:bg-void-800 text-sky-600 dark:text-sky-400 shadow-sm'
+                : 'region-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer';
+            });
+            renderHubPills();
+            renderSelectedHubBar();
+            renderBoard();
+            performLiveFetch();
+          });
+        });
+
+        document.getElementById('resetHubBtn').addEventListener('click', () => {
+          state.airport = 'ALL';
+          renderHubPills();
+          renderSelectedHubBar();
+          renderBoard();
+          performLiveFetch();
+        });
+
+        document.getElementById('boardSearchInput').addEventListener('input', (e) => {
+          state.search = e.target.value;
+          renderBoard();
+        });
+
+        // Movement Direction Filter Pills (All / Departures / Arrivals)
+        document.querySelectorAll('.movement-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.movementFilter = btn.getAttribute('data-movement') || 'ALL';
+            document.querySelectorAll('.movement-btn').forEach((b) => {
+              const active = b.getAttribute('data-movement') === state.movementFilter;
+              b.className = active
+                ? 'movement-btn min-h-[38px] rounded-lg text-xs font-bold transition cursor-pointer bg-white dark:bg-void-800 text-sky-600 dark:text-sky-400 shadow-sm'
+                : 'movement-btn min-h-[38px] rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer';
+            });
+            renderBoard();
+          });
+        });
+
+        // Watchlist form
+        const form = document.getElementById('addWatchForm');
+        document.getElementById('openAddWatchBtn').addEventListener('click', () => {
+          form.classList.toggle('hidden');
+          if (!form.classList.contains('hidden')) {
+            document.getElementById('watchCodeInput').focus();
+          }
+        });
+        document.getElementById('cancelWatchFormBtn').addEventListener('click', () => {
+          form.classList.add('hidden');
+          form.reset();
+        });
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const code = document.getElementById('watchCodeInput').value.trim().toUpperCase();
+          const airline = document.getElementById('watchAirlineInput').value.trim();
+          const origin = document.getElementById('watchOriginInput').value.trim().toUpperCase();
+          const dest = document.getElementById('watchDestInput').value.trim().toUpperCase();
+          const schedTime = document.getElementById('watchSchedInput').value.trim();
+          if (!code || !origin || !dest || !schedTime) return;
+
+          addWatchlistItem({ code, airline, origin, dest, schedTime });
+          form.reset();
+          form.classList.add('hidden');
+        });
+
+        document.getElementById('clearNotifLogBtn').addEventListener('click', () => {
+          state.notifLog = [];
+          saveStorage(STORAGE_KEYS.LOG, state.notifLog);
+          renderNotifLog();
+        });
+
+        // Settings actions
+        document.getElementById('saveLiveSettingsBtn').addEventListener('click', () => {
+          const checked = document.querySelector('input[name="liveSourceMode"]:checked');
+          state.prefs.sourceMode = checked ? checked.value : 'OPENSKY';
+          state.prefs.aviationstackKey = document.getElementById('aviationstackApiKeyInput').value.trim();
+          state.prefs.pollIntervalSec = Number(document.getElementById('pollIntervalSelect').value || 0);
+          persistPrefs();
+          setupPollTimer();
+          renderHeaderAndBanner();
+          performLiveFetch();
+        });
+
+        document.getElementById('requestBrowserNotifBtn').addEventListener('click', async () => {
+          if (!('Notification' in window)) {
+            pushInAppBanner('Browser Notifications', 'Not supported here; in-app alert banners are active.', 'info');
+            return;
+          }
+          try {
+            const permission = await Notification.requestPermission();
+            renderSettingsTab();
+            notifyUser('Notification Permission Updated', `Browser permission is now ${permission.toUpperCase()}.`, 'info', false);
+          } catch (err) {
+            pushInAppBanner('Permission Request', 'Could not update browser notification permission.', 'warn');
+          }
+        });
+
+        document.getElementById('testNotificationBtn').addEventListener('click', () => {
+          notifyUser('AeroOps Live Only Test Alert', 'In-app banner, optional chime, and notification log are working.', 'info', true);
+        });
+
+        document.getElementById('audioChimeCheckbox').addEventListener('change', (e) => {
+          state.prefs.chimeEnabled = e.target.checked;
+          persistPrefs();
+          if (state.prefs.chimeEnabled) playOptionalChime();
+        });
+
+        document.getElementById('darkThemeCheckbox').addEventListener('change', (e) => {
+          state.prefs.darkMode = e.target.checked;
+          persistPrefs();
+          applyTheme();
+        });
+
+        // iPhone hosting guide modal
+        const hostModal = document.getElementById('iphoneHostModal');
+        document.getElementById('openHostGuideBtn').addEventListener('click', () => hostModal.classList.remove('hidden'));
+        document.getElementById('closeHostModalBtn').addEventListener('click', () => hostModal.classList.add('hidden'));
+        document.getElementById('doneHostModalBtn').addEventListener('click', () => hostModal.classList.add('hidden'));
+        hostModal.addEventListener('click', (e) => {
+          if (e.target === hostModal) hostModal.classList.add('hidden');
+        });
+      }
+
+      // =====================================================================
+      // 8. HELPERS & INITIALIZATION
+      // =====================================================================
+      function formatClockHhMm(date) {
+        return date.toTimeString().slice(0, 5);
+      }
+
+      function formatClockHms(date) {
+        return date.toTimeString().slice(0, 8);
+      }
+
+      function extractHhMm(val) {
+        if (!val) return '--:--';
+        const m = /(\d{2}:\d{2})/.exec(String(val));
+        return m ? m[1] : '--:--';
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      window.addEventListener('DOMContentLoaded', () => {
+        try {
+          renderAll();
+        } catch (err) {
+          // Ensure navigation still binds even if an initial render step encounters an issue
+        }
+        bindEvents();
+        switchTab(state.activeTab || 'BOARD');
+        setupPollTimer();
+        // Attempt an initial live fetch on load; if it fails, the board stays empty with exact diagnostics
+        performLiveFetch();
+      });
+    })();
+  </script>
+</body>
+</html>
